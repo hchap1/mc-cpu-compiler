@@ -14,6 +14,7 @@ use std::env::args;
 |0110 | <n> -> a0       | <n> -> a<n>       |
 |0111 | <n> -> a1       |                   |
 |1000 | <n> -> ck       | jump -> <n>       |
+|1001 | r<n> -> i1      | r<n> -> io1       |
 |1111 | dummy           | pass              |
 |-------------------------------------------|
 */
@@ -25,7 +26,8 @@ struct Program {
 #[derive(PartialEq)]
 enum Location {
     RAM,
-    ALU
+    ALU,
+    IO
 }
 
 fn usize_to_binary(mut num: i32) -> String {
@@ -59,10 +61,17 @@ fn decode_location(encoded: &String) -> Result<(Location, String), String> {
             }
         }
         'a' => {
-            if numeric < 4 {
+            if numeric < 2 {
                 return Ok((Location::ALU, binary));
             } else {
                 return Err(format!("No such ALU address: {numeric}"));
+            }
+        }
+        'i' => {
+            if numeric < 1 {
+                return Ok((Location::IO, binary));
+            } else {
+                return Err(format!("No such IO address: {numeric}"));
             }
         }
         e => {
@@ -152,6 +161,10 @@ impl Program {
                                             errors.push(format!("Cannot add directly into ALU on line {line_num}"));
                                             String::new()
                                         }
+                                        Location::IO => {
+                                            errors.push(format!("Cannot add directly to IO on line {line_num}"));
+                                            String::new()
+                                        }
                                     }
                                 }
                                 Err(e) => {
@@ -174,6 +187,10 @@ impl Program {
                                         }
                                         Location::ALU => {
                                             errors.push(format!("Cannot add directly into ALU on line {line_num}"));
+                                            String::new()
+                                        }
+                                        Location::IO => {
+                                            errors.push(format!("Cannot add directly to IO on line {line_num}"));
                                             String::new()
                                         }
                                     }
@@ -263,9 +280,29 @@ impl Program {
                                                 }
                                             }
                                         }
-                                        else {
+                                        else if loc == Location::ALU {
                                             errors.push(format!("Cannot write ram to ram directly on line {line_num}"));
                                             String::new()
+                                        }
+                                        else {
+                                            let code = match addr.as_str() {
+                                                "0000" => {
+                                                    String::from("1001")
+                                                }
+                                                _ => {
+                                                    errors.push(format!("No such IO address on line {line_num}"));
+                                                    String::new()
+                                                }
+                                            };
+                                            match decode_location(&line[0]) {
+                                                Ok((_, ad)) => {
+                                                    format!("{code}{ad}")
+                                                }
+                                                Err(_) => {
+                                                    errors.push(format!("No such address on line {line_num}"));
+                                                    String::new()
+                                                }
+                                            }
                                         }
                                     }
                                     Err(_) => {
