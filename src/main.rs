@@ -15,6 +15,7 @@ use std::env::args;
 |0111 | <n> -> a1       |                   |
 |1000 | <n> -> ck       | jump -> <n>       |
 |1001 | r<n> -> i1      | r<n> -> io1       |
+|1010 | halt            | halt              |
 |1111 | dummy           | pass              |
 |-------------------------------------------|
 */
@@ -86,9 +87,9 @@ impl Program {
             Ok(raw) => {
                 let mut lines: Vec<String> = raw.lines().map(|x| x.to_string()).collect::<Vec<String>>();
                 let mut loops: Vec<usize> = vec![];
+                let mut for_loops: Vec<usize> = vec![];
                 lines.insert(0, String::from("pass"));
                 lines.insert(0, String::from("pass"));
-                let mut functions: Vec<usize> = vec![];
                 let mut indented: bool = false;
                 for (idx, line) in lines.iter().enumerate() {
                     if line.starts_with('\t') {
@@ -96,15 +97,15 @@ impl Program {
                     } else if line.starts_with("loop") {
                         loops.push(idx + 1);
                         indented = true;
-                    } else if line.starts_with("fn") {
-                        functions.push(idx + 1);
+                    } else if line.starts_with("for") {
+                        for_loops.push(idx + 1);
                         indented = true;
                     } else {
                         if indented {
                             if loops.len() % 2 == 1 {
                                 loops.push(idx);
-                            } else if functions.len() % 2 == 1 {
-                                functions.push(idx);
+                            } else if for_loops.len() % 2 == 1 {
+                                for_loops.push(idx);
                             }
                         }
                         indented = false;
@@ -115,8 +116,8 @@ impl Program {
                     else { x.to_string() } ).collect::<Vec<String>>();
                 if loops.len() % 2 == 1 {
                     loops.push(lines.len());
-                } else if functions.len() % 2 == 1 {
-                    functions.push(lines.len());
+                } else if for_loops.len() % 2 == 1 {
+                    for_loops.push(lines.len());
                 }
                             
                 for (i, idx) in loops.iter().enumerate() {
@@ -126,6 +127,20 @@ impl Program {
                         }
                         _ => {
                             lines.insert(*idx, format!("jump -> {}", loops[i-1]-2));
+                        }
+                    }
+                }
+                for (i, idx) in for_loops.iter().enumerate() {
+                    match i % 2 {
+                        0 => {
+                            let components: Vec<String> = for_loops[idx];
+                            lines.insert(idx - 1, String::from("ADD -> "));
+                            lines.insert(idx - 1, String::from("0 -> A0"));
+                            lines.insert(idx - 1, String::from("0 -> A1"));
+                            lines[idx - 1] = String::from("pass");
+                        }
+                        _ => {
+
                         }
                     }
                 }
@@ -146,6 +161,9 @@ impl Program {
             line_num += 1;
             if line.len() > 0 {
                 let command = match line[0].as_str() {
+                    "halt" => {
+                        String::from("10100000")
+                    }
                     "pass" => {
                         String::from("11111111")
                     }
@@ -158,11 +176,11 @@ impl Program {
                                             format!("0000{addr}")
                                         }
                                         Location::ALU => {
-                                            errors.push(format!("Cannot add directly into ALU on line {line_num}"));
+                                            errors.push(format!("Cannot add directly into ALU on line {line_num}, {line:?}"));
                                             String::new()
                                         }
                                         Location::IO => {
-                                            errors.push(format!("Cannot add directly to IO on line {line_num}"));
+                                            errors.push(format!("Cannot add directly to IO on line {line_num}, {line:?}"));
                                             String::new()
                                         }
                                     }
@@ -173,7 +191,7 @@ impl Program {
                                 }
                             }
                         } else {
-                            errors.push(format!("Expected assignment (->) on line {line_num}"));
+                            errors.push(format!("Expected assignment (->) on line {line_num}, {line:?}"));
                             String::new()
                         }
                     }
@@ -186,11 +204,11 @@ impl Program {
                                             format!("0001{addr}")
                                         }
                                         Location::ALU => {
-                                            errors.push(format!("Cannot add directly into ALU on line {line_num}"));
+                                            errors.push(format!("Cannot add directly into ALU on line {line_num}, {line:?}"));
                                             String::new()
                                         }
                                         Location::IO => {
-                                            errors.push(format!("Cannot add directly to IO on line {line_num}"));
+                                            errors.push(format!("Cannot add directly to IO on line {line_num}, {line:?}"));
                                             String::new()
                                         }
                                     }
@@ -201,7 +219,7 @@ impl Program {
                                 }
                             }
                         } else {
-                            errors.push(format!("Expected assignment (->) on line {line_num}"));
+                            errors.push(format!("Expected assignment (->) on line {line_num}, {line:?}"));
                             String::new()
                         }
                     }
@@ -212,7 +230,7 @@ impl Program {
                                     let addr: String = usize_to_binary(line[4].parse::<i32>().unwrap());
                                     format!("0100{addr}")
                                 } else {
-                                    errors.push(format!("IF operator only supports jump on line {line_num}"));
+                                    errors.push(format!("IF operator only supports jump on line {line_num}, {line:?}"));
                                     String::new()
                                 }
                             }
@@ -221,12 +239,12 @@ impl Program {
                                     let addr: String = usize_to_binary(line[4].parse::<i32>().unwrap());
                                     format!("0101{addr}")
                                 } else {
-                                    errors.push(format!("IF operator only supports jump on line {line_num}"));
+                                    errors.push(format!("IF operator only supports jump on line {line_num}, {line:?}"));
                                     String::new()
                                 }
                             }
                             &_ => {
-                                errors.push(format!("Invalid comparison: Expected == or != on line {line_num}"));
+                                errors.push(format!("Invalid comparison: Expected == or != on line {line_num}, {line:?}"));
                                 String::new()
                             }
                         }
@@ -243,12 +261,12 @@ impl Program {
                                     }
                                 }
                                 Err(_) => {
-                                    errors.push(format!("Invalid memory address on line {line_num}"));
+                                    errors.push(format!("Invalid memory address on line {line_num}, {line:?}"));
                                     String::new()
                                 }
                             }
                         } else {
-                            errors.push(format!("Expected assignment (->) on line {line_num}"));
+                            errors.push(format!("Expected assignment (->) on line {line_num}, {line:?}"));
                             String::new()
                         }
                     }
@@ -266,7 +284,7 @@ impl Program {
                                                     String::from("0011")
                                                 }
                                                 _ => {
-                                                    errors.push(format!("No such ALU address on line {line_num}"));
+                                                    errors.push(format!("No such ALU address on line {line_num}, {line:?}"));
                                                     String::new()
                                                 }
                                             };
@@ -275,13 +293,13 @@ impl Program {
                                                     format!("{code}{ad}")
                                                 }
                                                 Err(_) => {
-                                                    errors.push(format!("No such address on line {line_num}"));
+                                                    errors.push(format!("No such address on line {line_num}, {line:?}"));
                                                     String::new()
                                                 }
                                             }
                                         }
                                         else if loc == Location::ALU {
-                                            errors.push(format!("Cannot write ram to ram directly on line {line_num}"));
+                                            errors.push(format!("Cannot write ram to ram directly on line {line_num}, {line:?}"));
                                             String::new()
                                         }
                                         else {
@@ -290,7 +308,7 @@ impl Program {
                                                     String::from("1001")
                                                 }
                                                 _ => {
-                                                    errors.push(format!("No such IO address on line {line_num}"));
+                                                    errors.push(format!("No such IO address on line {line_num}, {line:?}"));
                                                     String::new()
                                                 }
                                             };
@@ -299,14 +317,14 @@ impl Program {
                                                     format!("{code}{ad}")
                                                 }
                                                 Err(_) => {
-                                                    errors.push(format!("No such address on line {line_num}"));
+                                                    errors.push(format!("No such address on line {line_num}, {line:?}"));
                                                     String::new()
                                                 }
                                             }
                                         }
                                     }
                                     Err(_) => {
-                                        errors.push(format!("No such address on line {line_num}"));
+                                        errors.push(format!("No such address on line {line_num}, {line:?}"));
                                         String::new()
                                     }
                                 }
@@ -315,7 +333,7 @@ impl Program {
                                 match a.parse::<i32>() {
                                     Ok(num) => {
                                         if num >= 16 {
-                                            errors.push(format!("Memory bus not large enough for > 4 bit assignment on line {line_num}"));
+                                            errors.push(format!("Memory bus not large enough for > 4 bit assignment on line {line_num}, {line:?}"));
                                             String::new()
                                         } else {
                                             let bin: String = usize_to_binary(num);
@@ -330,13 +348,13 @@ impl Program {
                                                                 String::from("0111")
                                                             }
                                                             _ => {
-                                                                errors.push(format!("Invalid ALU address on line {line_num}"));
+                                                                errors.push(format!("Invalid ALU address on line {line_num}, {line:?}"));
                                                                 String::new()
                                                             }
                                                         };
                                                         format!("{code}{bin}")
                                                     } else {
-                                                        errors.push(format!("Cannot write to ram, use ALU buffer on line {line_num}"));
+                                                        errors.push(format!("Cannot write to ram, use ALU buffer on line {line_num}, {line:?}"));
                                                         String::new()
                                                     }
                                                 }
@@ -348,7 +366,7 @@ impl Program {
                                         }
                                     }
                                     Err(_) => {
-                                        errors.push(format!("Invalid number on line {line_num}"));
+                                        errors.push(format!("Invalid number on line {line_num}, {line:?}"));
                                         String::new()
                                     }
                                 }
